@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FPY / RTY 計算機</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--text:#1f1f1f;--muted:#6b6b6b;--line:#e2e2de;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--bad:#b91c1c}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161616;--card:#1f1f1f;--text:#eee;--muted:#999;--line:#333;--accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#161616;--card:#1f1f1f;--text:#eee;--muted:#999;--line:#333;--accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif;padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px)}
+main{max-width:760px;margin:24px auto}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+th,td{padding:6px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500;font-size:12px}
+input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font-size:14px}
+input.num{text-align:right}
+.fpy{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 12px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.del{color:var(--bad);padding:4px 8px;border:none;background:none}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.result{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:12px}
+.kpi .label{color:var(--muted);font-size:12px}
+.kpi .val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.note{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+.msg{color:var(--warn);font-size:13px;margin-top:10px;min-height:1em}
+.err{color:var(--bad)}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>FPY / RTY 計算機</h1>
+  <div class="sub">輸入各站的投入數與一次通過數，即可算出各站 FPY 及整條線的 RTY。</div>
+
+  <div class="card">
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>站別</th>
+            <th style="text-align:right">投入數</th>
+            <th style="text-align:right">一次通過數</th>
+            <th style="text-align:right">FPY</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button id="add">＋ 新增站別</button>
+      <button id="export" class="primary">匯出 Excel</button>
+      <button id="reset">清除全部</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="result">
+      <div class="kpi">
+        <div class="label">RTY（整線直通率）</div>
+        <div class="val" id="rty">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">整線不良率（1 − RTY）</div>
+        <div class="val" id="loss">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">最低 FPY 站別</div>
+        <div class="val" id="weak" style="font-size:18px">—</div>
+      </div>
+    </div>
+    <div class="note">
+      FPY = 一次通過數 ÷ 投入數 × 100%<br>
+      RTY = 各站 FPY 相乘。返工後合格的產品不計入一次通過數。
+    </div>
+  </div>
+</main>
+
+<script>
+let rows = [
+  { name: "鍛造", input: "", pass: "" },
+  { name: "機加工", input: "", pass: "" },
+  { name: "裝配", input: "", pass: "" }
+];
+
+const tbody = document.getElementById("tbody");
+const msg = document.getElementById("msg");
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function fpyOf(r) {
+  const i = parseFloat(r.input);
+  const p = parseFloat(r.pass);
+  if (r.input === "" || r.pass === "" || isNaN(i) || isNaN(p)) return { state: "empty" };
+  if (i <= 0) return { state: "invalid" };
+  if (p < 0 || p > i) return { state: "invalid" };
+  return { state: "ok", value: p / i };
+}
+
+function pct(v) {
+  return (v * 100).toFixed(2) + "%";
+}
+
+// 無條件捨去至小數第 2 位（不四捨五入）
+function pctTrunc(v) {
+  return (Math.floor(v * 10000 + 1e-9) / 100).toFixed(2) + "%";
+}
+
+function render() {
+  tbody.innerHTML = rows.map((r, idx) => `
+    <tr>
+      <td><input type="text" data-k="name" data-i="${idx}" value="${esc(r.name)}" placeholder="站別名稱"></td>
+      <td><input class="num" type="number" min="0" step="1" data-k="input" data-i="${idx}" value="${esc(r.input)}"></td>
+      <td><input class="num" type="number" min="0" step="1" data-k="pass" data-i="${idx}" value="${esc(r.pass)}"></td>
+      <td class="fpy" id="f${idx}"></td>
+      <td><button class="del" data-del="${idx}" title="刪除">✕</button></td>
+    </tr>`).join("");
+  update();
+}
+
+function update() {
+  const results = rows.map(fpyOf);
+
+  results.forEach((res, idx) => {
+    const cell = document.getElementById("f" + idx);
+    if (res.state === "ok") {
+      cell.textContent = pct(res.value);
+      cell.className = "fpy";
+    } else if (res.state === "invalid") {
+      cell.textContent = "輸入有誤";
+      cell.className = "fpy err";
+    } else {
+      cell.textContent = "—";
+      cell.className = "fpy";
+    }
+  });
+
+  const invalid = results.some(r => r.state === "invalid");
+  const empty = results.some(r => r.state === "empty");
+  const rtyEl = document.getElementById("rty");
+  const lossEl = document.getElementById("loss");
+  const weakEl = document.getElementById("weak");
+
+  if (rows.length === 0) {
+    msg.textContent = "請至少新增一個站別。";
+    rtyEl.textContent = lossEl.textContent = weakEl.textContent = "—";
+    return;
+  }
+
+  if (invalid) {
+    msg.textContent = "有站別的數字不合理（投入數需大於 0，且一次通過數不可大於投入數）。";
+    rtyEl.textContent = lossEl.textContent = weakEl.textContent = "—";
+    return;
+  }
+
+  if (empty) {
+    msg.textContent = "請填完所有站別的數字以計算 RTY。";
+    rtyEl.textContent = lossEl.textContent = weakEl.textContent = "—";
+    return;
+  }
+
+  msg.textContent = "";
+  const values = results.map(r => r.value);
+  const rty = values.reduce((a, b) => a * b, 1);
+  rtyEl.textContent = pctTrunc(rty);
+  rtyEl.style.color = rty >= 0.95 ? "var(--ok)" : rty >= 0.85 ? "var(--warn)" : "var(--bad)";
+  lossEl.textContent = pctTrunc(1 - rty);
+
+  let minIdx = 0;
+  values.forEach((v, i) => { if (v < values[minIdx]) minIdx = i; });
+  weakEl.textContent = `${rows[minIdx].name || "第 " + (minIdx + 1) + " 站"}（${pct(values[minIdx])}）`;
+}
+
+tbody.addEventListener("input", e => {
+  const t = e.target;
+  if (!t.dataset.k) return;
+  rows[+t.dataset.i][t.dataset.k] = t.value;
+  update();
+});
+
+tbody.addEventListener("click", e => {
+  const btn = e.target.closest("[data-del]");
+  if (!btn) return;
+  rows.splice(+btn.dataset.del, 1);
+  render();
+});
+
+document.getElementById("add").addEventListener("click", () => {
+  rows.push({ name: "站別 " + (rows.length + 1), input: "", pass: "" });
+  render();
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  rows = [{ name: "站別 1", input: "", pass: "" }];
+  render();
+});
+
+function exportXlsx() {
+  if (typeof XLSX === "undefined") {
+    msg.textContent = "Excel 匯出元件載入失敗，請檢查網路連線。";
+    return;
+  }
+  const results = rows.map(fpyOf);
+  if (results.some(r => r.state !== "ok")) {
+    msg.textContent = "請先填完所有站別的正確數字，再匯出 Excel。";
+    return;
+  }
+  const values = results.map(r => r.value);
+  const rawRty = values.reduce((a, b) => a * b, 1);
+  const rty = Math.floor(rawRty * 10000 + 1e-9) / 10000;
+  const loss = Math.floor((1 - rawRty) * 10000 + 1e-9) / 10000;
+
+  const data = [["站別", "投入數", "一次通過數", "FPY"]];
+  rows.forEach((r, i) => data.push([r.name, Number(r.input), Number(r.pass), values[i]]));
+  data.push([]);
+  data.push(["RTY（截去小數第 2 位）", rty]);
+  data.push(["整線不良率", loss]);
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const pctCell = addr => { if (ws[addr]) ws[addr].z = "0.00%"; };
+  for (let i = 1; i <= rows.length; i++) pctCell("D" + (i + 1));
+  pctCell("B" + (rows.length + 3));
+  pctCell("B" + (rows.length + 4));
+  ws["!cols"] = [{ wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 12 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "FPY_RTY");
+  XLSX.writeFile(wb, "FPY_RTY_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+  msg.textContent = "";
+}
+
+document.getElementById("export").addEventListener("click", exportXlsx);
+
+render();
+</script>
+</body>
+</html>
