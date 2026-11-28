@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>World Clock</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 40px 24px;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #fff0ef 0%, #ffdcd8 50%, #fff3f1 100%);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+
+  .page-wrap {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #1b2a3d;
+    margin: 0 0 40px;
+  }
+
+  #settings-btn {
+    position: fixed;
+    top: 24px;
+    right: max(24px, calc(50vw - 480px));
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 50%;
+    background: #F3814D;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(243, 129, 77, 0.45);
+    z-index: 10;
+  }
+
+  #settings-btn svg {
+    width: 26px;
+    height: 26px;
+    fill: #ffffff;
+  }
+
+  .clock-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+
+  @media (max-width: 960px) {
+    .clock-container {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .clock-container {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .clock-box {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    padding: 28px 32px;
+    box-shadow: 0 12px 32px rgba(70, 120, 180, 0.16);
+    text-align: left;
+  }
+
+  .clock-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .clock-flag {
+    font-size: 40px;
+    line-height: 1;
+  }
+
+  .clock-city {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1b2a3d;
+  }
+
+  .time-display {
+    font-size: 52px;
+    font-weight: 700;
+    color: #0a0a0a;
+    letter-spacing: 1px;
+    margin: 4px 0 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .clock-meta {
+    font-size: 13px;
+    color: #9aa4b2;
+    margin: 0;
+  }
+
+  #control-panel {
+    display: none;
+  }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(20, 30, 45, 0.35);
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-box {
+    width: 340px;
+    max-width: 90%;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px);
+    border-radius: 24px;
+    padding: 32px;
+    box-shadow: 0 20px 50px rgba(20, 30, 45, 0.25);
+  }
+
+  .modal-title {
+    margin: 0 0 6px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #1b2a3d;
+  }
+
+  .modal-subtitle {
+    margin: 0 0 22px;
+    font-size: 13px;
+    color: #9aa4b2;
+    line-height: 1.5;
+  }
+
+  .input-wrapper {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .input-wrapper input {
+    width: 100%;
+    padding: 14px 44px 14px 16px;
+    border-radius: 16px;
+    border: 1px solid #e3e8ee;
+    background: #f7f9fb;
+    font-size: 14px;
+    color: #1b2a3d;
+  }
+
+  .input-wrapper svg {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: #9aa4b2;
+    stroke-width: 1.6;
+    pointer-events: none;
+  }
+
+  .modal-box .btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .modal-box button {
+    width: 100%;
+    padding: 13px 16px;
+    border: none;
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  #modal-apply-btn {
+    background: #F3814D;
+    color: #ffffff;
+  }
+
+  #modal-reset-btn {
+    background: #f2f4f7;
+    color: #1b2a3d;
+  }
+
+  #close-modal-btn {
+    background: #f2f4f7;
+    color: #e0453c;
+  }
+
+  #modal-status-msg {
+    font-size: 12px;
+    color: #5b6675;
+    margin: 14px 0 0;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+<h1>World Clock</h1>
+
+<button id="settings-btn" aria-label="設定">
+  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <path d="M29.181 19.070c-1.679-2.908-0.669-6.634 2.255-8.328l-3.145-5.447c-0.898 0.527-1.943 0.829-3.058 0.829-3.361 0-6.085-2.742-6.085-6.125h-6.289c0.008 1.044-0.252 2.103-0.811 3.070-1.679 2.908-5.411 3.897-8.339 2.211l-3.144 5.447c0.905 0.515 1.689 1.268 2.246 2.234 1.676 2.903 0.672 6.623-2.241 8.319l3.145 5.447c0.895-0.522 1.935-0.82 3.044-0.82 3.35 0 6.067 2.725 6.084 6.092h6.289c-0.003-1.034 0.259-2.080 0.811-3.038 1.676-2.903 5.399-3.894 8.325-2.219l3.145-5.447c-0.899-0.515-1.678-1.266-2.232-2.226zM16 22.479c-3.578 0-6.479-2.901-6.479-6.479s2.901-6.479 6.479-6.479c3.578 0 6.479 2.901 6.479 6.479s-2.901 6.479-6.479 6.479z"></path>
+  </svg>
+</button>
+
+<div class="clock-container">
+
+  <div class="clock-box" id="clock-taiwan">
+    <div class="clock-header">
+      <span class="clock-flag">🇹🇼</span>
+      <span class="clock-city">Taiwan</span>
+    </div>
+    <p class="time-display">--:--:--</p>
+    <p class="clock-meta" data-gmt="GMT+8" data-diff="0"></p>
+  </div>
+
+  <div class="clock-box" id="clock-tokyo">
+    <div class="clock-header">
+      <span class="clock-flag">🇯🇵</span>
+      <span class="clock-city">Tokyo</span>
+    </div>
+    <p class="time-display">--:--:--</p>
+    <p class="clock-meta" data-gmt="GMT+9" data-diff="1"></p>
+  </div>
+
+  <div class="clock-box" id="clock-seoul">
+    <div class="clock-header">
+      <span class="clock-flag">🇰🇷</span>
+      <span class="clock-city">Seoul</span>
+    </div>
+    <p class="time-display">--:--:--</p>
+    <p class="clock-meta" data-gmt="GMT+9" data-diff="1"></p>
+  </div>
+
+  <div class="clock-box" id="clock-newyork">
+    <div class="clock-header">
+      <span class="clock-flag">🇺🇸</span>
+      <span class="clock-city">New York</span>
+    </div>
+    <p class="time-display">--:--:--</p>
+    <p class="clock-meta" data-gmt="GMT-5" data-diff="-13"></p>
+  </div>
+
+  <div class="clock-box" id="clock-losangeles">
+    <div class="clock-header">
+      <span class="clock-flag">🇺🇸</span>
+      <span class="clock-city">Los Angeles</span>
+    </div>
+    <p class="time-display">--:--:--</p>
+    <p class="clock-meta" data-gmt="GMT-8" data-diff="-16"></p>
+  </div>
+
+  <div class="clock-box" id="clock-paris">
+    <div class="clock-header">
+      <span class="clock-flag">🇫🇷</span>
+      <span class="clock-city">Paris</span>
+    </div>
+    <p class="time-display">--:--:--</p>
+    <p class="clock-meta" data-gmt="GMT+1" data-diff="-7"></p>
+  </div>
+
+</div>
+
+</div>
+
+<div id="control-panel">
+  <label for="custom-time-input">修改台灣目前時間：</label>
+  <input type="datetime-local" id="custom-time-input" step="1">
+  <button id="apply-btn">修改台灣時間</button>
+  <button id="reset-btn">還原目前時間</button>
+  <p id="status-msg"></p>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <h2 class="modal-title">設定時間</h2>
+    <p class="modal-subtitle">調整台灣基準時間，所有城市將同步連動。</p>
+
+    <div class="input-wrapper">
+      <input type="datetime-local" id="modal-time-input" step="1" placeholder="選擇日期與時間">
+      <svg viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="16" rx="3"></rect>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+        <line x1="8" y1="2.5" x2="8" y2="6.5"></line>
+        <line x1="16" y1="2.5" x2="16" y2="6.5"></line>
+      </svg>
+    </div>
+
+    <div class="btn-group">
+      <button id="modal-apply-btn">更新時間</button>
+      <button id="modal-reset-btn">還原目前時間</button>
+      <button id="close-modal-btn">關閉視窗</button>
+    </div>
+
+    <p id="modal-status-msg"></p>
+  </div>
+</div>
+
+<script>
+  // 各地區相對於台灣的時差（小時），用於實際換算時間
+  var OFFSET_FROM_TAIWAN = {
+    taiwan: 0,
+    tokyo: 1,
+    seoul: 1,
+    newyork: -13,
+    losangeles: -16,
+    paris: -7
+  };
+
+  // 用來記錄「使用者設定的台灣時間」與「瀏覽器實際時間」之間的差值（毫秒）
+  // 0 表示目前是真實時間，沒有被修改過
+  var timeOffsetMs = 0;
+
+  function getCurrentTaiwanTime() {
+    return new Date(Date.now() + timeOffsetMs);
+  }
+
+  function formatTime(date) {
+    var hh = String(date.getHours()).padStart(2, '0');
+    var mm = String(date.getMinutes()).padStart(2, '0');
+    var ss = String(date.getSeconds()).padStart(2, '0');
+    return hh + ':' + mm + ':' + ss;
+  }
+
+  function formatFullTime(date) {
+    var yyyy = date.getFullYear();
+    var MM = String(date.getMonth() + 1).padStart(2, '0');
+    var dd = String(date.getDate()).padStart(2, '0');
+    return yyyy + '/' + MM + '/' + dd + ' ' + formatTime(date);
+  }
+
+  function updateClocks() {
+    var taiwanTime = getCurrentTaiwanTime();
+
+    for (var key in OFFSET_FROM_TAIWAN) {
+      var offsetHours = OFFSET_FROM_TAIWAN[key];
+      var localTime = new Date(taiwanTime.getTime() + offsetHours * 60 * 60 * 1000);
+
+      var container = document.getElementById('clock-' + key);
+      if (container) {
+        var timeEl = container.querySelector('.time-display');
+        var metaEl = container.querySelector('.clock-meta');
+        timeEl.textContent = formatTime(localTime);
+
+        var gmt = metaEl.getAttribute('data-gmt');
+        var diff = Number(metaEl.getAttribute('data-diff'));
+        var diffText = diff === 0 ? '台灣時差 +0h' : ('台灣時差 ' + (diff > 0 ? '+' : '') + diff + 'h');
+        metaEl.textContent = gmt + '　·　' + diffText;
+      }
+    }
+  }
+
+  function applyCustomTime(inputVal, statusElId) {
+    var statusEl = document.getElementById(statusElId);
+    if (!inputVal) {
+      statusEl.textContent = '請先選擇一個時間再送出';
+      return;
+    }
+    var chosenDate = new Date(inputVal);
+    var now = new Date();
+    timeOffsetMs = chosenDate.getTime() - now.getTime();
+    statusEl.textContent = '已修改台灣時間為：' + formatFullTime(chosenDate);
+    updateClocks();
+  }
+
+  function resetTime(statusElId) {
+    timeOffsetMs = 0;
+    document.getElementById(statusElId).textContent = '已還原為目前真實時間';
+    updateClocks();
+  }
+
+  document.getElementById('apply-btn').addEventListener('click', function () {
+    applyCustomTime(document.getElementById('custom-time-input').value, 'status-msg');
+  });
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    resetTime('status-msg');
+  });
+
+  var modalOverlay = document.getElementById('modal-overlay');
+
+  document.getElementById('settings-btn').addEventListener('click', function () {
+    modalOverlay.classList.add('show');
+  });
+
+  document.getElementById('close-modal-btn').addEventListener('click', function () {
+    modalOverlay.classList.remove('show');
+  });
+
+  document.getElementById('modal-apply-btn').addEventListener('click', function () {
+    applyCustomTime(document.getElementById('modal-time-input').value, 'modal-status-msg');
+  });
+
+  document.getElementById('modal-reset-btn').addEventListener('click', function () {
+    resetTime('modal-status-msg');
+  });
+
+  setInterval(updateClocks, 1000);
+  updateClocks();
+</script>
+
+</body>
+</html>
