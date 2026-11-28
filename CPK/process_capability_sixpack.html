@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>製程能力分析 | Process Capability Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #EDF1F5;
+    --panel: #FFFFFF;
+    --ink: #1B2430;
+    --ink-soft: #57667A;
+    --line: #CBD5E1;
+    --line-soft: #E2E8F0;
+    --blue: #2A5D8C;
+    --blue-deep: #16344F;
+    --good: #2F7D5F;
+    --bad: #B23A2F;
+    --warn: #B8863A;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--paper);
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 14px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  header .sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+
+  .panel-head {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--blue-deep);
+    background: #E4ECF3;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .panel-body { padding: 16px; }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    margin: 14px 0 4px;
+  }
+  label:first-child { margin-top: 0; }
+
+  textarea, input {
+    width: 100%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 8px 10px;
+    background: #FBFCFD;
+    color: var(--ink);
+  }
+  textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
+  input:focus, textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .btnrow { display: flex; gap: 8px; margin-top: 16px; }
+  button {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: none;
+    border-radius: 3px;
+    padding: 10px 14px;
+    cursor: pointer;
+    flex: 1;
+  }
+  #analyzeBtn { background: var(--blue); color: white; }
+  #analyzeBtn:hover { background: var(--blue-deep); }
+  #sampleBtn { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  #sampleBtn:hover { background: var(--line-soft); }
+  #trimBtn { background: var(--panel); color: var(--bad); border: 1px solid #E3BDB7; }
+  #trimBtn:hover { background: #F7E7E5; }
+  #restoreBtn { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  #restoreBtn:hover:not(:disabled) { background: var(--line-soft); }
+  #restoreBtn:disabled { color: var(--line); cursor: not-allowed; }
+
+  .hint { font-size: 0.72rem; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+  .err { color: var(--bad); font-size: 0.78rem; margin-top: 10px; display: none; }
+
+  /* ---- results ---- */
+  .headline {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 20px;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .cpk-big { font-family: 'IBM Plex Mono', monospace; font-size: 3rem; font-weight: 600; line-height: 1; }
+  .cpk-label { font-size: 0.75rem; color: var(--ink-soft); margin-bottom: 4px; }
+  .verdict {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .verdict.good { background: #E4F3EC; color: var(--good); }
+  .verdict.warn { background: #F6EEDD; color: var(--warn); }
+  .verdict.bad { background: #F7E7E5; color: var(--bad); }
+
+  table.stats { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
+  table.stats td { padding: 8px 14px; border-bottom: 1px solid var(--line-soft); }
+  table.stats td.k { color: var(--ink-soft); width: 45%; }
+  table.stats td.v { text-align: right; font-weight: 600; }
+  table.stats tr:last-child td { border-bottom: none; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+  .two-col > div { border-right: 1px solid var(--line); }
+  .two-col > div:last-child { border-right: none; }
+  .section-title { font-size: 0.78rem; color: var(--ink-soft); padding: 12px 16px 0; }
+
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+  @media (max-width: 700px) { .charts { grid-template-columns: 1fr; } }
+  .chart-box { padding: 14px; border-right: 1px solid var(--line); }
+  .chart-box:last-child { border-right: none; }
+  .chart-title { font-size: 0.78rem; color: var(--ink-soft); margin-bottom: 8px; }
+  .dot-readout {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--blue-deep);
+    background: #E4ECF3;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 5px 10px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .mini-btn {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.72rem;
+    border: 1px solid var(--bad);
+    color: var(--bad);
+    background: #FFFFFF;
+    border-radius: 3px;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  .mini-btn:hover { background: #F7E7E5; }
+  svg { width: 100%; height: auto; display: block; }
+  .axis-label { font-size: 9px; fill: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
+  .grid-line { stroke: var(--line-soft); stroke-width: 1; }
+
+  .placeholder {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+  .note { font-size: 0.72rem; color: var(--ink-soft); padding: 10px 16px; border-top: 1px solid var(--line-soft); line-height: 1.6; }
+
+  /* ---- capability sixpack ---- */
+  .sixpack { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .sp-cell { background: var(--panel); padding: 12px; min-width: 0; }
+  @media (max-width: 900px) { .sixpack { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .sixpack { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>製程能力分析 Process Capability Analysis</h1>
+    </div>
+    <div class="sub">Cp / Cpk / Pp / Ppk · Normality Check</div>
+  </header>
+
+  <div class="grid">
+
+    <!-- input panel -->
+    <div class="panel">
+      <div class="panel-head">輸入資料 INPUT</div>
+      <div class="panel-body">
+        <label for="dataInput">量測數據（以逗號、空白或換行分隔）</label>
+        <textarea id="dataInput" placeholder="10.02&#10;9.98&#10;10.05&#10;..."></textarea>
+
+        <label>規格限 Specification Limits</label>
+        <div class="row3">
+          <input id="uslInput" type="number" step="any" placeholder="USL">
+          <input id="targetInput" type="number" step="any" placeholder="Target">
+          <input id="lslInput" type="number" step="any" placeholder="LSL">
+        </div>
+        <div class="hint">USL、LSL 至少填一項；Target 為選填。</div>
+
+        <label for="subgroupInput">子群大小 Subgroup Size</label>
+        <input id="subgroupInput" type="number" step="1" min="1" value="1">
+        <div class="hint">預設為 1，以移動全距法估計組內變異。</div>
+
+        <div class="btnrow">
+          <button id="analyzeBtn">分析 Analyze</button>
+          <button id="sampleBtn">範例資料</button>
+        </div>
+        <div class="btnrow">
+          <button id="trimBtn">刪除最接近規格5筆</button>
+          <button id="restoreBtn" disabled>回復 Undo</button>
+        </div>
+        <div class="hint" id="trimStatus"></div>
+        <div class="err" id="errBox"></div>
+      </div>
+    </div>
+
+    <!-- results panel -->
+    <div class="panel" id="resultsPanel">
+      <div class="panel-head">分析結果 RESULTS</div>
+      <div class="placeholder" id="placeholder">
+        輸入數據並按下「分析」，即可產生 Cp / Cpk / Pp / Ppk 報告與圖表。
+      </div>
+      <div id="resultsContent" style="display:none;">
+
+        <div class="headline">
+          <div>
+            <div class="cpk-label">CPK</div>
+            <div class="cpk-big" id="cpkBig">–</div>
+          </div>
+          <div id="verdictBox"></div>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <div class="section-title">能力指標 Capability Indices</div>
+            <table class="stats" id="statsTable"></table>
+          </div>
+          <div>
+            <div class="section-title">常態性檢定 Normality (Anderson–Darling)</div>
+            <table class="stats" id="normTable"></table>
+            <div class="section-title" style="margin-top:6px;">基本統計量 Basic Stats</div>
+            <table class="stats" id="basicTable"></table>
+          </div>
+        </div>
+
+        <div class="charts">
+          <div class="chart-box">
+            <div class="chart-title">分布圖（逐筆資料點） Dot Plot + Normal Fit</div>
+            <div class="dot-readout" id="histReadout">
+              <span id="histValueLabel">點擊圖上任一點，查看該筆數值</span>
+              <button id="deletePointBtn" class="mini-btn" style="display:none;">刪除此點</button>
+            </div>
+            <div id="histChart"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">常態機率圖 Normal Q-Q Plot</div>
+            <div id="qqChart"></div>
+          </div>
+        </div>
+
+        <div class="panel-head" style="border-top:1px solid var(--line);">Capability Sixpack 六合一能力圖</div>
+        <div class="sixpack" id="sixpack"></div>
+        <div class="note">
+          常態性檢定採 Anderson–Darling 近似演算法，僅供工程參考，非嚴謹統計軟體等級精度。若需正式報告，建議以 Minitab / R / Python(scipy) 等統計軟體覆核。
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ---------- math helpers ---------- */
+function erf(x) {
+  const sign = x >= 0 ? 1 : -1;
+  x = Math.abs(x);
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+  const t = 1/(1+p*x);
+  const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+function normalCDF(x, mean=0, std=1) { return 0.5*(1+erf((x-mean)/(std*Math.sqrt(2)))); }
+function normalPDF(x, mean=0, std=1) {
+  return (1/(std*Math.sqrt(2*Math.PI))) * Math.exp(-((x-mean)**2)/(2*std*std));
+}
+function invNorm(p) {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const p_low = 0.02425, p_high = 1 - p_low;
+  let q, r;
+  if (p < p_low) {
+    q = Math.sqrt(-2*Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if (p <= p_high) {
+    q = p - 0.5; r = q*q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+  } else {
+    q = Math.sqrt(-2*Math.log(1-p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+}
+function mean(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function stdSample(arr){
+  const m = mean(arr);
+  const ss = arr.reduce((a,b)=>a+(b-m)*(b-m),0);
+  return Math.sqrt(ss/(arr.length-1));
+}
+function withinStd(arr, subgroupSize){
+  if (subgroupSize > 1 && arr.length % subgroupSize === 0) {
+    const d2Table = {2:1.128,3:1.693,4:2.059,5:2.326,6:2.534,7:2.704,8:2.847,9:2.970,10:3.078};
+    const d2 = d2Table[subgroupSize] || 2.326;
+    const ranges = [];
+    for (let i=0;i<arr.length;i+=subgroupSize){
+      const sub = arr.slice(i, i+subgroupSize);
+      ranges.push(Math.max(...sub) - Math.min(...sub));
+    }
+    return mean(ranges)/d2;
+  }
+  const mr = [];
+  for (let i=1;i<arr.length;i++) mr.push(Math.abs(arr[i]-arr[i-1]));
+  if (mr.length === 0) return stdSample(arr);
+  return mean(mr)/1.128;
+}
+function andersonDarling(arr, m, s){
+  const sorted = [...arr].sort((a,b)=>a-b);
+  const n = sorted.length;
+  const F = sorted.map(x => normalCDF((x-m)/s));
+  let S = 0;
+  for (let i=1;i<=n;i++){
+    const Fi = Math.min(Math.max(F[i-1], 1e-12), 1-1e-12);
+    const Fni = Math.min(Math.max(F[n-i], 1e-12), 1-1e-12);
+    S += (2*i-1)*(Math.log(Fi) + Math.log(1-Fni));
+  }
+  const A2 = -n - S/n;
+  return A2*(1 + 0.75/n + 2.25/(n*n));
+}
+
+/* ---------- parsing ---------- */
+function parseData(text){
+  return text.split(/[\s,;]+/).map(s=>s.trim()).filter(s=>s.length>0).map(Number).filter(v=>!isNaN(v));
+}
+
+/* ---------- SVG chart builders ---------- */
+function buildHistogram(data, usl, lsl, target, mCenter, sOverall){
+  const W = 460, H = 300, M = {t:14,r:16,b:32,l:44};
+  const plotW = W - M.l - M.r, plotH = H - M.t - M.b;
+
+  const n = data.length;
+  // fine-resolution columns so each data point keeps its own dot, stacked within its column
+  const binCount = Math.max(10, Math.min(40, Math.round(Math.sqrt(n)*2)));
+  const dataMin = Math.min(...data, lsl ?? Infinity);
+  const dataMax = Math.max(...data, usl ?? -Infinity);
+  const pad = (dataMax-dataMin)*0.05 || 1;
+  const xMin = dataMin - pad, xMax = dataMax + pad;
+  const binWidth = (xMax-xMin)/binCount;
+  const bins = Array.from({length: binCount}, () => []);
+  data.forEach((v, origIdx)=>{
+    let idx = Math.floor((v-xMin)/binWidth);
+    if (idx>=binCount) idx = binCount-1;
+    if (idx<0) idx = 0;
+    bins[idx].push({v, origIdx});
+  });
+  const maxStack = Math.max(...bins.map(b=>b.length), 1);
+  // expected count curve (normal pdf scaled to counts) on the same count axis as the stacked dots
+  const peakExpected = n*binWidth*normalPDF(mCenter, mCenter, sOverall);
+  const maxCount = Math.max(maxStack, peakExpected) * 1.1;
+
+  const xScale = x => M.l + ((x-xMin)/(xMax-xMin))*plotW;
+  const yScaleCount = c => M.t + plotH - (c/maxCount)*plotH;
+  const baseline = yScaleCount(0);
+
+  const colPx = xScale(xMin+binWidth) - xScale(xMin);
+  const radius = Math.max(1.6, Math.min(colPx/2*0.82, (plotH/maxCount)/2*0.88, 6.5));
+
+  let dots = '';
+  bins.forEach((pts,i)=>{
+    const cx = xScale(xMin + (i+0.5)*binWidth);
+    pts.forEach((pt,k)=>{
+      const cy = baseline - radius - k*(radius*2+1);
+      dots += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${radius.toFixed(1)}" data-value="${pt.v}" data-index="${pt.origIdx}" data-r="${radius.toFixed(2)}" fill="#2A5D8C" fill-opacity="0.75" stroke="#FFFFFF" stroke-width="0.6" style="cursor:pointer" onclick="selectDotValue(this)"/>`;
+    });
+  });
+
+  let curve = '';
+  const steps = 80;
+  let pts2 = [];
+  for (let i=0;i<=steps;i++){
+    const x = xMin + (i/steps)*(xMax-xMin);
+    const c = n*binWidth*normalPDF(x, mCenter, sOverall);
+    pts2.push(`${xScale(x).toFixed(1)},${yScaleCount(c).toFixed(1)}`);
+  }
+  curve = `<polyline points="${pts2.join(' ')}" fill="none" stroke="#B23A2F" stroke-width="2"/>`;
+
+  let specLines = '';
+  if (usl != null) specLines += `<line x1="${xScale(usl).toFixed(1)}" y1="${M.t}" x2="${xScale(usl).toFixed(1)}" y2="${M.t+plotH}" stroke="#B23A2F" stroke-width="1.5" stroke-dasharray="5,3"/><text x="${xScale(usl).toFixed(1)}" y="${M.t-3}" class="axis-label" text-anchor="middle">USL</text>`;
+  if (lsl != null) specLines += `<line x1="${xScale(lsl).toFixed(1)}" y1="${M.t}" x2="${xScale(lsl).toFixed(1)}" y2="${M.t+plotH}" stroke="#B23A2F" stroke-width="1.5" stroke-dasharray="5,3"/><text x="${xScale(lsl).toFixed(1)}" y="${M.t-3}" class="axis-label" text-anchor="middle">LSL</text>`;
+  if (target != null) specLines += `<line x1="${xScale(target).toFixed(1)}" y1="${M.t}" x2="${xScale(target).toFixed(1)}" y2="${M.t+plotH}" stroke="#2F7D5F" stroke-width="1.5" stroke-dasharray="2,3"/>`;
+  specLines += `<line x1="${xScale(mCenter).toFixed(1)}" y1="${M.t}" x2="${xScale(mCenter).toFixed(1)}" y2="${M.t+plotH}" stroke="#1B2430" stroke-width="1.2"/>`;
+
+  let xTicks = '';
+  const tickCount = 5;
+  for (let i=0;i<=tickCount;i++){
+    const x = xMin + (i/tickCount)*(xMax-xMin);
+    xTicks += `<line x1="${xScale(x).toFixed(1)}" y1="${M.t}" x2="${xScale(x).toFixed(1)}" y2="${M.t+plotH}" class="grid-line"/>
+               <text x="${xScale(x).toFixed(1)}" y="${M.t+plotH+16}" class="axis-label" text-anchor="middle">${x.toFixed(2)}</text>`;
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}">
+    ${xTicks}
+    <line x1="${M.l}" y1="${M.t+plotH}" x2="${M.l+plotW}" y2="${M.t+plotH}" stroke="#1B2430" stroke-width="1"/>
+    ${curve}
+    ${dots}
+    ${specLines}
+  </svg>`;
+}
+
+function buildQQ(data, mCenter, sOverall){
+  const W = 460, H = 300, M = {t:14,r:16,b:32,l:44};
+  const plotW = W - M.l - M.r, plotH = H - M.t - M.b;
+  const sorted = [...data].sort((a,b)=>a-b);
+  const n = sorted.length;
+  const theo = sorted.map((_,i)=> invNorm((i+1-0.375)/(n+0.25)) * sOverall + mCenter);
+
+  const allVals = [...sorted, ...theo];
+  const vMin = Math.min(...allVals), vMax = Math.max(...allVals);
+  const pad = (vMax-vMin)*0.06 || 1;
+  const lo = vMin-pad, hi = vMax+pad;
+  const scale = v => M.l + ((v-lo)/(hi-lo))*plotW;
+  const scaleY = v => M.t + plotH - ((v-lo)/(hi-lo))*plotH;
+
+  let dots = '';
+  for (let i=0;i<n;i++){
+    dots += `<circle cx="${scale(theo[i]).toFixed(1)}" cy="${scaleY(sorted[i]).toFixed(1)}" r="2.6" fill="#2A5D8C" fill-opacity="0.75"/>`;
+  }
+  const line = `<line x1="${scale(lo).toFixed(1)}" y1="${scaleY(lo).toFixed(1)}" x2="${scale(hi).toFixed(1)}" y2="${scaleY(hi).toFixed(1)}" stroke="#B23A2F" stroke-width="1.5"/>`;
+
+  let ticks = '';
+  const tickCount = 5;
+  for (let i=0;i<=tickCount;i++){
+    const v = lo + (i/tickCount)*(hi-lo);
+    ticks += `<line x1="${scale(v).toFixed(1)}" y1="${M.t}" x2="${scale(v).toFixed(1)}" y2="${M.t+plotH}" class="grid-line"/>
+              <text x="${scale(v).toFixed(1)}" y="${M.t+plotH+16}" class="axis-label" text-anchor="middle">${v.toFixed(2)}</text>`;
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}">
+    ${ticks}
+    <line x1="${M.l}" y1="${M.t+plotH}" x2="${M.l+plotW}" y2="${M.t+plotH}" stroke="#1B2430" stroke-width="1"/>
+    ${line}
+    ${dots}
+  </svg>`;
+}
+
+
+/* ---------- capability sixpack ---------- */
+const XBAR_A2={2:1.880,3:1.023,4:0.729,5:0.577,6:0.483,7:0.419,8:0.373,9:0.337,10:0.308};
+const R_D3={2:0,3:0,4:0,5:0,6:0,7:0.076,8:0.136,9:0.184,10:0.223};
+const R_D4={2:3.267,3:2.574,4:2.282,5:2.114,6:2.004,7:1.924,8:1.864,9:1.816,10:1.777};
+const SP_W=460, SP_H=260, SP_M={t:14,r:16,b:28,l:48};
+const SP_PW=SP_W-SP_M.l-SP_M.r, SP_PH=SP_H-SP_M.t-SP_M.b;
+
+function spLine(x1,y1,x2,y2,c,w,dash){
+  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${c}" stroke-width="${w}"${dash?` stroke-dasharray="${dash}"`:''}/>`;
+}
+function spXTicks(lo,hi,X){
+  let s='';
+  for(let k=0;k<=4;k++){const v=lo+k*(hi-lo)/4;
+    s+=`<text x="${X(v).toFixed(1)}" y="${SP_H-8}" class="axis-label" text-anchor="middle">${v.toFixed(2)}</text>`;}
+  return s;
+}
+function spControl(vals, lines, ooc){
+  const pts=[...vals, ...lines.map(l=>l.v)];
+  const lo=Math.min(...pts), hi=Math.max(...pts);
+  const pad=(hi-lo)*0.08||1, y0=lo-pad, y1=hi+pad;
+  const X=i=> SP_M.l+(vals.length>1 ? i/(vals.length-1)*SP_PW : SP_PW/2);
+  const Y=v=> SP_M.t+SP_PH-((v-y0)/(y1-y0))*SP_PH;
+  let s='';
+  for(let k=0;k<=3;k++){const v=y0+k*(y1-y0)/3;
+    s+=spLine(SP_M.l,Y(v),SP_M.l+SP_PW,Y(v),'#E2E8F0',1);
+    s+=`<text x="${SP_M.l-5}" y="${(Y(v)+3).toFixed(1)}" class="axis-label" text-anchor="end">${v.toFixed(3)}</text>`;}
+  lines.forEach(L=>{
+    s+=spLine(SP_M.l,Y(L.v),SP_M.l+SP_PW,Y(L.v),L.c,1.2,L.d?'5,3':'');
+    s+=`<text x="${SP_M.l+SP_PW-2}" y="${(Y(L.v)-3).toFixed(1)}" class="axis-label" text-anchor="end">${L.t} ${L.v.toFixed(3)}</text>`;});
+  s+=`<polyline points="${vals.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="#2A5D8C" stroke-width="1"/>`;
+  vals.forEach((v,i)=>{const bad=ooc(v);
+    s+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${bad?3.2:2.2}" fill="${bad?'#B23A2F':'#2A5D8C'}"/>`;});
+  return `<svg viewBox="0 0 ${SP_W} ${SP_H}">${s}</svg>`;
+}
+function spSpread(sO, sW, usl, lsl){
+  const rows=[];
+  if(usl!=null && lsl!=null) rows.push({t:'規格寬 Spec Width', v:usl-lsl, c:'#2F7D5F'});
+  rows.push({t:'Within 6σ', v:6*sW, c:'#2A5D8C'});
+  rows.push({t:'Overall 6σ', v:6*sO, c:'#1B2430'});
+  const labW=110, plotW=SP_W-labW-SP_M.r-10;
+  const mx=Math.max(...rows.map(r=>r.v))*1.15;
+  const rowH=SP_PH/rows.length;
+  let out='';
+  rows.forEach((r,i)=>{
+    const y=SP_M.t+i*rowH+rowH*0.2, h=rowH*0.6, w=(r.v/mx)*plotW;
+    out+=`<text x="${labW-6}" y="${(y+h/2+3).toFixed(1)}" class="axis-label" text-anchor="end">${r.t}</text>`;
+    out+=`<rect x="${labW}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${r.c}" fill-opacity="0.8"/>`;
+    out+=`<text x="${(labW+w+4).toFixed(1)}" y="${(y+h/2+3).toFixed(1)}" class="axis-label">${r.v.toFixed(4)}</text>`;
+  });
+  out+=`<text x="${labW}" y="${SP_H-8}" class="axis-label">製程散佈 vs 規格寬（6σ 比較）</text>`;
+  return `<svg viewBox="0 0 ${SP_W} ${SP_H}">${out}</svg>`;
+}
+function buildSixpack(data, usl, lsl, target, m, sO, sW, sg, idx){
+  const cell=(t,svg)=>`<div class="sp-cell"><div class="chart-title">${t}</div>${svg}</div>`;
+  const L=(v,c,t,d)=>({v,c,t,d});
+  let t1, t2, c1, c2;
+  if (sg>1 && data.length % sg === 0 && XBAR_A2[sg]!==undefined){
+    const subs=[]; for(let i=0;i<data.length;i+=sg) subs.push(data.slice(i,i+sg));
+    const xb=subs.map(mean), rs=subs.map(s=>Math.max(...s)-Math.min(...s));
+    const gm=mean(xb), rb=mean(rs);
+    const ux=gm+XBAR_A2[sg]*rb, lx=gm-XBAR_A2[sg]*rb;
+    const ur=R_D4[sg]*rb, lr=R_D3[sg]*rb;
+    t1='X̄ 管制圖 Xbar'; c1=spControl(xb,[L(ux,'#B23A2F','UCL',1),L(gm,'#2F7D5F','CL',0),L(lx,'#B23A2F','LCL',1)], v=>v>ux||v<lx);
+    t2='R 管制圖 Range'; c2=spControl(rs,[L(ur,'#B23A2F','UCL',1),L(rb,'#2F7D5F','CL',0),L(lr,'#B23A2F','LCL',1)], v=>v>ur||v<lr);
+  } else {
+    const mr=[]; for(let i=1;i<data.length;i++) mr.push(Math.abs(data[i]-data[i-1]));
+    const mrb=mean(mr), ui=m+2.66*mrb, li=m-2.66*mrb, umr=3.267*mrb;
+    t1='I 管制圖 Individuals'; c1=spControl(data,[L(ui,'#B23A2F','UCL',1),L(m,'#2F7D5F','CL',0),L(li,'#B23A2F','LCL',1)], v=>v>ui||v<li);
+    t2='MR 管制圖 Moving Range'; c2=spControl(mr,[L(umr,'#B23A2F','UCL',1),L(mrb,'#2F7D5F','CL',0)], v=>v>umr);
+  }
+  const runLines=[];
+  if(usl!=null) runLines.push(L(usl,'#B23A2F','USL',1));
+  if(lsl!=null) runLines.push(L(lsl,'#B23A2F','LSL',1));
+  runLines.push(L(m,'#2F7D5F','Mean',0));
+  const c6=spControl(data.slice(-25), runLines, v=>(usl!=null&&v>usl)||(lsl!=null&&v<lsl));
+  return cell(t1,c1)
+    + cell(t2,c2)
+    + cell('能力條圖 Spread vs Spec', spSpread(sO,sW,usl,lsl))
+    + cell('最近 25 筆 Run Chart', c6);
+}
+
+/* ---------- main ---------- */
+function fmt(v, d=4){ return (v===null || v===undefined || !isFinite(v)) ? '—' : v.toFixed(d); }
+
+function analyze(){
+  const errBox = document.getElementById('errBox');
+  errBox.style.display = 'none';
+
+  const data = parseData(document.getElementById('dataInput').value);
+  const uslRaw = document.getElementById('uslInput').value;
+  const lslRaw = document.getElementById('lslInput').value;
+  const targetRaw = document.getElementById('targetInput').value;
+  const subgroupSize = parseInt(document.getElementById('subgroupInput').value) || 1;
+
+  const usl = uslRaw === '' ? null : parseFloat(uslRaw);
+  const lsl = lslRaw === '' ? null : parseFloat(lslRaw);
+  const target = targetRaw === '' ? null : parseFloat(targetRaw);
+
+  if (data.length < 5) {
+    errBox.textContent = '請輸入至少 5 筆有效數據。';
+    errBox.style.display = 'block';
+    return;
+  }
+  if (usl === null && lsl === null) {
+    errBox.textContent = '請至少填寫 USL 或 LSL 其中一項規格限。';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  const n = data.length;
+  const m = mean(data);
+  const sOverall = stdSample(data);
+  const sWithin = withinStd(data, subgroupSize);
+
+  const Cp = (usl!=null && lsl!=null) ? (usl-lsl)/(6*sWithin) : null;
+  const Pp = (usl!=null && lsl!=null) ? (usl-lsl)/(6*sOverall) : null;
+  const CPU_st = usl!=null ? (usl-m)/(3*sWithin) : Infinity;
+  const CPL_st = lsl!=null ? (m-lsl)/(3*sWithin) : Infinity;
+  const Cpk = Math.min(CPU_st, CPL_st);
+  const PPU_lt = usl!=null ? (usl-m)/(3*sOverall) : Infinity;
+  const PPL_lt = lsl!=null ? (m-lsl)/(3*sOverall) : Infinity;
+  const Ppk = Math.min(PPU_lt, PPL_lt);
+
+  let Cpm = null;
+  if (target!=null && usl!=null && lsl!=null) {
+    const tau = Math.sqrt(sWithin*sWithin + (m-target)*(m-target));
+    Cpm = (usl-lsl)/(6*tau);
+  }
+
+  const pAbove = usl!=null ? 1-normalCDF(usl,m,sOverall) : 0;
+  const pBelow = lsl!=null ? normalCDF(lsl,m,sOverall) : 0;
+  const ppmPred = (pAbove+pBelow)*1e6;
+  let nOOS = 0;
+  if (usl!=null) nOOS += data.filter(v=>v>usl).length;
+  if (lsl!=null) nOOS += data.filter(v=>v<lsl).length;
+  const ppmObs = (nOOS/n)*1e6;
+
+  const ad = andersonDarling(data, m, sOverall);
+  const adCrit = 0.752;
+  const isNormal = ad < adCrit;
+
+  /* ---- render ---- */
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('resultsContent').style.display = 'block';
+
+  document.getElementById('cpkBig').textContent = fmt(Cpk, 3);
+  let verdictHtml, verdictClass;
+  if (Cpk >= 1.67) { verdictClass='good'; verdictHtml='優異 Excellent'; }
+  else if (Cpk >= 1.33) { verdictClass='good'; verdictHtml='良好 Adequate'; }
+  else if (Cpk >= 1.0) { verdictClass='warn'; verdictHtml='尚可，需監控 Marginal'; }
+  else { verdictClass='bad'; verdictHtml='能力不足 Inadequate'; }
+  document.getElementById('verdictBox').innerHTML = `<span class="verdict ${verdictClass}">${verdictHtml}</span>`;
+
+  const statsRows = [
+    ['Cp', fmt(Cp,4)], ['Cpk', fmt(Cpk,4)],
+    ['CPU', fmt(CPU_st,4)], ['CPL', fmt(CPL_st,4)],
+    ['Pp', fmt(Pp,4)], ['Ppk', fmt(Ppk,4)],
+    ['PPU', fmt(PPU_lt,4)], ['PPL', fmt(PPL_lt,4)],
+    ['Cpm', Cpm!=null ? fmt(Cpm,4) : '—'],
+    ['預期不良率 (PPM)', fmt(ppmPred,1)],
+    ['實際超規 (PPM)', fmt(ppmObs,1)],
+  ];
+  document.getElementById('statsTable').innerHTML = statsRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join('');
+
+  const normRows = [
+    ['A² 統計量', fmt(ad,4)],
+    ['臨界值 (α=0.05)', adCrit.toFixed(3)],
+    ['判定 Verdict', isNormal ? '<span style="color:#2F7D5F">符合常態</span>' : '<span style="color:#B23A2F">不符合常態</span>'],
+  ];
+  document.getElementById('normTable').innerHTML = normRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join('');
+
+  const basicRows = [
+    ['樣本數 n', n],
+    ['平均值 Mean', fmt(m,4)],
+    ['標準差(組內)', fmt(sWithin,4)],
+    ['標準差(整體)', fmt(sOverall,4)],
+  ];
+  document.getElementById('basicTable').innerHTML = basicRows.map(([k,v])=>`<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`).join('');
+
+  clearDotSelection();
+  document.getElementById('histChart').innerHTML = buildHistogram(data, usl, lsl, target, m, sOverall);
+  document.getElementById('qqChart').innerHTML = buildQQ(data, m, sOverall);
+  document.getElementById('sixpack').innerHTML = buildSixpack(data, usl, lsl, target, m, sOverall, sWithin, subgroupSize, {Cp, Cpk, Pp, Ppk});
+}
+
+function loadSample(){
+  // Box-Muller generated sample, mean ~10.0, std ~0.15, n=60
+  const n = 60, mu = 10.0, sigma = 0.15;
+  const vals = [];
+  for (let i=0;i<n;i++){
+    const u1 = Math.random(), u2 = Math.random();
+    const z = Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+    vals.push((mu + z*sigma).toFixed(4));
+  }
+  document.getElementById('dataInput').value = vals.join('\n');
+  document.getElementById('uslInput').value = 10.5;
+  document.getElementById('lslInput').value = 9.5;
+  document.getElementById('targetInput').value = 10.0;
+  document.getElementById('subgroupInput').value = 1;
+
+  trimHistory = [];
+  document.getElementById('restoreBtn').disabled = true;
+  document.getElementById('trimStatus').textContent = '';
+  clearDotSelection();
+}
+
+let selectedPointIndex = null;
+
+function selectDotValue(el){
+  const chart = document.getElementById('histChart');
+  chart.querySelectorAll('circle').forEach(c=>{
+    c.setAttribute('stroke', '#FFFFFF');
+    c.setAttribute('stroke-width', '0.6');
+    c.setAttribute('r', c.getAttribute('data-r'));
+  });
+  const r = parseFloat(el.getAttribute('data-r'));
+  el.setAttribute('stroke', '#1B2430');
+  el.setAttribute('stroke-width', '1.6');
+  el.setAttribute('r', (r*1.25).toFixed(2));
+  const v = parseFloat(el.getAttribute('data-value'));
+  selectedPointIndex = parseInt(el.getAttribute('data-index'));
+  document.getElementById('histValueLabel').textContent = `已選取數值: ${v.toFixed(4)}`;
+  document.getElementById('deletePointBtn').style.display = 'inline-block';
+}
+
+function clearDotSelection(){
+  selectedPointIndex = null;
+  document.getElementById('histValueLabel').textContent = '點擊圖上任一點，查看該筆數值';
+  document.getElementById('deletePointBtn').style.display = 'none';
+}
+
+function deleteSelectedPoint(){
+  if (selectedPointIndex === null) return;
+  const data = parseData(document.getElementById('dataInput').value);
+  if (selectedPointIndex >= data.length) { clearDotSelection(); return; }
+
+  const removedValue = data[selectedPointIndex];
+  trimHistory.push(document.getElementById('dataInput').value);
+  document.getElementById('restoreBtn').disabled = false;
+
+  data.splice(selectedPointIndex, 1);
+  document.getElementById('dataInput').value = data.join('\n');
+  document.getElementById('trimStatus').textContent = `已刪除 1 筆資料: ${removedValue.toFixed(4)}（可按「回復 Undo」還原）`;
+
+  clearDotSelection();
+  if (document.getElementById('resultsContent').style.display !== 'none') {
+    analyze();
+  }
+}
+
+let trimHistory = [];
+
+function trimNearestToLimits(){
+  const trimStatus = document.getElementById('trimStatus');
+  const errBox = document.getElementById('errBox');
+  errBox.style.display = 'none';
+
+  const data = parseData(document.getElementById('dataInput').value);
+  const uslRaw = document.getElementById('uslInput').value;
+  const lslRaw = document.getElementById('lslInput').value;
+  const usl = uslRaw === '' ? null : parseFloat(uslRaw);
+  const lsl = lslRaw === '' ? null : parseFloat(lslRaw);
+
+  if (usl === null && lsl === null) {
+    errBox.textContent = '請先至少填寫 USL 或 LSL，才能判斷「最接近規格」的點。';
+    errBox.style.display = 'block';
+    return;
+  }
+  if (data.length === 0) {
+    errBox.textContent = '目前沒有可供刪除的數據。';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  const distToLimit = v => {
+    let d = Infinity;
+    if (usl !== null) d = Math.min(d, Math.abs(v - usl));
+    if (lsl !== null) d = Math.min(d, Math.abs(v - lsl));
+    return d;
+  };
+
+  const indexed = data.map((v,i) => ({v, i, d: distToLimit(v)}));
+  indexed.sort((a,b) => a.d - b.d);
+  const removeCount = Math.min(5, indexed.length);
+  const toRemove = new Set(indexed.slice(0, removeCount).map(o => o.i));
+  const removedValues = indexed.slice(0, removeCount).map(o => o.v);
+  const remaining = data.filter((_, i) => !toRemove.has(i));
+
+  // save current textarea content so it can be restored
+  trimHistory.push(document.getElementById('dataInput').value);
+  document.getElementById('restoreBtn').disabled = false;
+
+  document.getElementById('dataInput').value = remaining.join('\n');
+  trimStatus.textContent = `已移除 ${removeCount} 筆最接近規格的數據: ${removedValues.map(v=>v.toFixed(4)).join(', ')}`;
+
+  if (document.getElementById('resultsContent').style.display !== 'none') {
+    analyze();
+  }
+}
+
+function restoreTrimmed(){
+  if (trimHistory.length === 0) return;
+  const prev = trimHistory.pop();
+  document.getElementById('dataInput').value = prev;
+  document.getElementById('trimStatus').textContent = '已回復上一次刪除的數據。';
+  if (trimHistory.length === 0) document.getElementById('restoreBtn').disabled = true;
+  clearDotSelection();
+
+  if (document.getElementById('resultsContent').style.display !== 'none') {
+    analyze();
+  }
+}
+
+document.getElementById('analyzeBtn').addEventListener('click', analyze);
+document.getElementById('sampleBtn').addEventListener('click', loadSample);
+document.getElementById('trimBtn').addEventListener('click', trimNearestToLimits);
+document.getElementById('restoreBtn').addEventListener('click', restoreTrimmed);
+document.getElementById('deletePointBtn').addEventListener('click', deleteSelectedPoint);
+</script>
+</body>
+</html>
